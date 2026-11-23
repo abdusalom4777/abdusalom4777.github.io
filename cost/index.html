@@ -100,14 +100,15 @@ input.s{width:64px;text-align:right}
         <thead><tr>
           <th>№</th><th>Название</th><th>Станок</th><th>Марка</th>
           <th class="num">Цикл, с</th><th class="num">Гнёзд</th><th class="num">Вес, г</th>
-          <th class="num">Шт/сутки</th><th class="num">Станок/шт</th><th class="num">Сырьё/шт</th>
+          <th class="num">Шт/сутки</th><th class="num">Станок/шт</th><th class="num">Сырьё/шт</th><th title="Сырьё привозит клиент — считаем только работу станка">Сырьё клиента</th>
           <th class="num">Себест./шт</th><th class="num">Цена/шт</th>
         </tr></thead>
-        <tbody id="molds-body"><tr><td colspan="12" class="muted" style="padding:20px">Загрузка…</td></tr></tbody>
+        <tbody id="molds-body"><tr><td colspan="13" class="muted" style="padding:20px">Загрузка…</td></tr></tbody>
       </table></div>
       <div class="hint">
         Станок/шт = стоимость суток ÷ (часов × 3600 ÷ цикл × гнёзда). Сырьё/шт = вес × цена кг × (1 + угар).<br>
         ⚠️ <b>Цикл общий с формой ТПА</b>: поменяете здесь — поменяется и при вводе продукции.
+        «Сырьё клиента» — услуга: сырьё привозит клиент, в цене только работа станка.<br>
         Станок с пометкой <span class="tag tag-blue">авто</span> взят из Журнала (последний, на котором шла форма).
       </div>
     </div>
@@ -209,18 +210,18 @@ function calcMold(m){
   var raw=D.raw.find(function(r){return r.grade===m.grade;});
   var mach=D.machines.find(function(x){return x.id===m.machine;});
   if(!m.grade) why.push('нет марки'); else if(!raw) why.push('марки нет в «Сырьё»');
-  else if(raw.price==='') why.push('нет цены '+m.grade);
+  else if(raw.price===''&&!m.client) why.push('нет цены '+m.grade);
   if(!m.machine) why.push('нет станка'); else if(!mach) why.push('станка нет в «Станки»');
   else if(raw){ if(mach.day[raw.cat]==='') why.push(m.machine+' не работает на '+raw.cat); }
   if(!(m.cycle>0)) why.push('нет цикла');
   if(!(m.cav>0)) why.push('нет гнёзд');
-  if(!(m.weight>0)) why.push('нет веса');
+  if(!(m.weight>0)&&!m.client) why.push('нет веса');
   var hours=mach&&mach.hours>0?mach.hours:20;
   var perDay=(m.cycle>0&&m.cav>0)?hours*3600/m.cycle*m.cav:0;
   var day=(mach&&raw)?mach.day[raw.cat]:'';
   var machPc=(perDay>0&&day!=='')?day/perDay:null;
   var ugar=settingsVal('Угар %',2)/100;
-  var rawPc=(raw&&raw.price!==''&&m.weight>0)?m.weight/1000*raw.price*(1+ugar):null;
+  var rawPc=m.client?0:(raw&&raw.price!==''&&m.weight>0)?m.weight/1000*raw.price*(1+ugar):null;
   var seb=(machPc!=null&&rawPc!=null)?machPc+rawPc:null;
   var k=1;
   if(document.getElementById('t-margin').checked) k*=1+settingsVal('Маржа %',0)/100;
@@ -263,12 +264,13 @@ function renderMolds(){
       '<td class="num">'+fmt(m.weight,2)+'</td>'+
       '<td class="num muted">'+(c.perDay?fmt(c.perDay):'—')+'</td>'+
       '<td class="num">'+(c.machPc!=null?fmt(c.machPc,1):'—')+'</td>'+
-      '<td class="num">'+(c.rawPc!=null?fmt(c.rawPc,1):'—')+'</td>'+
+      '<td class="num">'+(m.client?'<span class="muted">0</span>':c.rawPc!=null?fmt(c.rawPc,1):'—')+'</td>'+
+      '<td style="text-align:center"><input type="checkbox" data-mold="'+esc(m.id)+'" data-f="client"'+(m.client?' checked':'')+'></td>'+
       '<td class="num total">'+(c.seb!=null?fmt(c.seb,1):'<span class="why">'+esc(c.why.join(', '))+'</span>')+'</td>'+
       '<td class="num price">'+(c.price!=null?fmt(c.price,1):'—')+'</td>'+
     '</tr>');
   });
-  document.getElementById('molds-body').innerHTML=rows.join('')||'<tr><td colspan="12" class="muted" style="padding:20px">Ничего не найдено</td></tr>';
+  document.getElementById('molds-body').innerHTML=rows.join('')||'<tr><td colspan="13" class="muted" style="padding:20px">Ничего не найдено</td></tr>';
   document.getElementById('molds-count').innerHTML=D.molds.length+' форм'+(bad?' · <span class="tag tag-red">без расчёта: '+bad+'</span>':' · <span class="tag tag-green">все посчитаны</span>');
 }
 function renderRaw(){
@@ -310,6 +312,8 @@ document.addEventListener('change',function(e){
       if(!(parseFloat(v)>0)){alert('Цикл должен быть числом больше 0');t.value=m.cycle;return;}
       if(!confirm('Цикл формы '+d.mold+': '+m.cycle+' → '+v+' сек.\nОн поменяется и в форме ввода ТПА. Сохранить?')){t.value=m.cycle;return;}
       save({action:'costSetMold',id:d.mold,field:'cycle',value:v},'✓ цикл сохранён');
+    } else if(d.f==='client'){
+      save({action:'costSetMold',id:d.mold,field:'client',value:t.checked?'1':''});
     } else save({action:'costSetMold',id:d.mold,field:d.f,value:t.value});
   } else if(d.grade){
     save({action:'costSetPrice',grade:d.grade,price:cleanNum(t.value)},'✓ цена сохранена');
