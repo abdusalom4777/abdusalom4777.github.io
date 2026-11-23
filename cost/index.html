@@ -37,6 +37,7 @@ input,select{padding:6px 8px;border:1px solid var(--border);border-radius:7px;ba
 input:focus,select:focus{border-color:var(--text);background:var(--surface)}
 input.n{width:96px;text-align:right}
 input.s{width:64px;text-align:right}
+input.xs{width:52px;text-align:right}
 .btn{padding:7px 14px;border-radius:8px;border:1px solid var(--border);font-family:inherit;font-size:13px;font-weight:500;cursor:pointer;background:var(--surface);color:var(--text);white-space:nowrap}
 .btn:hover{background:var(--surface2)}
 .btn-dark{background:var(--text);color:#fff;border-color:transparent}
@@ -88,7 +89,7 @@ input.s{width:64px;text-align:right}
   <div class="tabs">
     <button class="tab active" data-tab="molds">Прайс по формам</button>
     <button class="tab" data-tab="new">Новый расчёт</button>
-    <button class="tab" data-tab="raw">Сырьё</button>
+    <button class="tab" data-tab="raw">Сырьё, краситель, упаковка</button>
     <button class="tab" data-tab="machines">Станки</button>
     <button class="tab" data-tab="settings">Настройки</button>
   </div>
@@ -109,10 +110,10 @@ input.s{width:64px;text-align:right}
         <thead><tr>
           <th>№</th><th>Название</th><th>Станок</th><th>Марка</th>
           <th class="num">Цикл, с</th><th class="num">Гнёзд</th><th class="num">Вес, г</th>
-          <th class="num">Шт/сутки</th><th class="num">Станок/шт</th><th class="num">Сырьё/шт</th><th title="Сырьё привозит клиент — считаем только работу станка">Сырьё клиента</th>
+          <th class="num">Шт/сутки</th><th class="num">Станок/шт</th><th class="num">Сырьё/шт</th><th title="Сырьё привозит клиент — считаем только работу станка">Сырьё клиента</th><th>Краситель, % от веса</th><th>Упаковка, шт в ней</th><th class="num">Краск.+упак./шт</th>
           <th class="num">Себест./шт</th><th class="num">Цена/шт</th>
         </tr></thead>
-        <tbody id="molds-body"><tr><td colspan="13" class="muted" style="padding:20px">Загрузка…</td></tr></tbody>
+        <tbody id="molds-body"><tr><td colspan="16" class="muted" style="padding:20px">Загрузка…</td></tr></tbody>
       </table></div>
       <div class="hint">
         Станок/шт = стоимость суток ÷ (часов × 3600 ÷ цикл × гнёзда). Сырьё/шт = вес × цена кг × (1 + угар).<br>
@@ -137,6 +138,10 @@ input.s{width:64px;text-align:right}
         <label>Гнёзда<input id="nd-cav" class="s" inputmode="numeric"></label>
         <label>Вес, г<input id="nd-weight" class="s" inputmode="decimal"></label>
         <label class="toggle" style="align-self:flex-end"><input type="checkbox" id="nd-clientraw"> сырьё клиента</label>
+        <label>Краситель<select id="nd-color"></select></label>
+        <label>% красителя<input id="nd-colorpct" class="s" inputmode="decimal" placeholder="2"></label>
+        <label>Упаковка<select id="nd-pack"></select></label>
+        <label>Шт в упаковке<input id="nd-packqty" class="s" inputmode="numeric"></label>
         <label style="flex:1;min-width:200px">Комментарий<input id="nd-note" placeholder="тираж, срок, цвет…" style="width:100%"></label>
       </div>
       <div class="nd-res" id="nd-res"></div>
@@ -176,6 +181,17 @@ input.s{width:64px;text-align:right}
         <input id="ng-lux" placeholder="Как в канале (напр. Shurtan 0525)" style="width:240px">
         <button class="btn btn-dark" id="ng-add">Добавить</button>
       </div>
+    </div>
+    <div class="card">
+      <div class="card-head"><span class="card-title">Красители, сум/кг</span></div>
+      <div class="scroll"><table><tbody id="colors-body"></tbody></table></div>
+      <div class="grid-form"><input id="nc-name" placeholder="Название красителя" style="width:200px"><input id="nc-price" class="n" placeholder="Цена/кг" inputmode="numeric"><button class="btn btn-dark" data-list-add="color">Добавить</button></div>
+    </div>
+    <div class="card">
+      <div class="card-head"><span class="card-title">Упаковка, сум за 1 упаковку</span></div>
+      <div class="scroll"><table><tbody id="packs-body"></tbody></table></div>
+      <div class="grid-form"><input id="np-name" placeholder="Пакет, мешок, коробка…" style="width:200px"><input id="np-price" class="n" placeholder="Цена" inputmode="numeric"><button class="btn btn-dark" data-list-add="pack">Добавить</button></div>
+      <div class="hint">У каждой формы в «Прайсе» выберите упаковку и сколько штук в ней — получится упаковка/шт.</div>
     </div>
   </div>
 
@@ -262,11 +278,26 @@ function calcMold(m){
   var machPc=(perDay>0&&day!=='')?day/perDay:null;
   var ugar=settingsVal('Угар %',2)/100;
   var rawPc=m.client?0:(raw&&raw.price!==''&&m.weight>0)?m.weight/1000*raw.price*(1+ugar):null;
-  var seb=(machPc!=null&&rawPc!=null)?machPc+rawPc:null;
+  // краситель: вес × % × цена/кг; упаковка: цена упаковки ÷ штук в ней
+  var colorPc=0,packPc=0;
+  if(m.color){
+    var col=(D.colors||[]).find(function(x){return x.name===m.color;});
+    if(!col||col.price==='') why.push('нет цены красителя «'+m.color+'»');
+    else if(!(m.colorPct>0)) why.push('нет % красителя');
+    else if(m.weight>0) colorPc=m.weight/1000*m.colorPct/100*col.price;
+  }
+  if(m.pack){
+    var pk=(D.packs||[]).find(function(x){return x.name===m.pack;});
+    if(!pk||pk.price==='') why.push('нет цены упаковки «'+m.pack+'»');
+    else if(!(m.packQty>0)) why.push('нет штук в упаковке');
+    else packPc=pk.price/m.packQty;
+  }
+  var extraOk=why.filter(function(w){return /красител|упаковк/.test(w);}).length===0;
+  var seb=(machPc!=null&&rawPc!=null&&extraOk)?machPc+rawPc+colorPc+packPc:null;
   var k=1;
   if(document.getElementById('t-margin').checked) k*=1+settingsVal('Маржа %',0)/100;
   if(document.getElementById('t-vat').checked) k*=1+settingsVal('НДС %',0)/100;
-  return {why:why,perDay:perDay,machPc:machPc,rawPc:rawPc,seb:seb,price:seb!=null?seb*k:null};
+  return {why:why,perDay:perDay,machPc:machPc,rawPc:rawPc,colorPc:colorPc,packPc:packPc,seb:seb,price:seb!=null?seb*k:null};
 }
 
 // ---- отрисовка ----
@@ -288,6 +319,7 @@ function renderMolds(){
   var grades=D.raw.map(function(r){return r.grade;});
   var machs=D.machines.map(function(m){return m.id;});
   var machLbl={};D.machines.forEach(function(m){machLbl[m.id]=m.id+' · '+m.model;});
+  var colorNames=(D.colors||[]).map(function(x){return x.name;}),packNames=(D.packs||[]).map(function(x){return x.name;});
   var rows=[],bad=0;
   D.molds.forEach(function(m){
     var c=calcMold(m);
@@ -307,11 +339,16 @@ function renderMolds(){
       '<td class="num">'+(c.machPc!=null?fmt(c.machPc,1):'—')+'</td>'+
       '<td class="num">'+(m.client?'<span class="muted">0</span>':c.rawPc!=null?fmt(c.rawPc,1):'—')+'</td>'+
       '<td style="text-align:center"><input type="checkbox" data-mold="'+esc(m.id)+'" data-f="client"'+(m.client?' checked':'')+'></td>'+
+      '<td style="white-space:nowrap"><select data-mold="'+esc(m.id)+'" data-f="color">'+opts(colorNames,m.color,'нет')+'</select> '+
+        (m.color?'<input class="xs" data-mold="'+esc(m.id)+'" data-f="colorPct" value="'+esc(m.colorPct)+'" inputmode="decimal" placeholder="%">':'')+'</td>'+
+      '<td style="white-space:nowrap"><select data-mold="'+esc(m.id)+'" data-f="pack">'+opts(packNames,m.pack,'нет')+'</select> '+
+        (m.pack?'<input class="xs" data-mold="'+esc(m.id)+'" data-f="packQty" value="'+esc(m.packQty)+'" inputmode="numeric" placeholder="шт">':'')+'</td>'+
+      '<td class="num">'+((c.colorPc||c.packPc)?fmt(c.colorPc+c.packPc,1):'<span class="muted">—</span>')+'</td>'+
       '<td class="num total">'+(c.seb!=null?fmt(c.seb,1):'<span class="why">'+esc(c.why.join(', '))+'</span>')+'</td>'+
       '<td class="num price">'+(c.price!=null?fmt(c.price,1):'—')+'</td>'+
     '</tr>');
   });
-  document.getElementById('molds-body').innerHTML=rows.join('')||'<tr><td colspan="13" class="muted" style="padding:20px">Ничего не найдено</td></tr>';
+  document.getElementById('molds-body').innerHTML=rows.join('')||'<tr><td colspan="16" class="muted" style="padding:20px">Ничего не найдено</td></tr>';
   document.getElementById('molds-count').innerHTML=D.molds.length+' форм'+(bad?' · <span class="tag tag-red">без расчёта: '+bad+'</span>':' · <span class="tag tag-green">все посчитаны</span>');
 }
 function renderRaw(){
@@ -326,6 +363,12 @@ function renderRaw(){
       '<td class="num">'+(lux==='BOR'?'BOR':lux!==''?fmt(lux):'—')+(r.luxDate?'<div class="muted" style="font-size:11px">'+esc(r.luxDate)+'</div>':'')+'</td>'+
       '<td>'+diff+'</td></tr>';
   }).join('');
+  [['color','colors-body',D.colors],['pack','packs-body',D.packs]].forEach(function(L){
+    document.getElementById(L[1]).innerHTML=(L[2]||[]).map(function(x){
+      return '<tr><td><b>'+esc(x.name)+'</b></td><td class="num"><input class="n" data-list="'+L[0]+'" data-name="'+esc(x.name)+'" value="'+esc(x.price)+'" inputmode="numeric" placeholder="нет"></td>'+
+        '<td style="text-align:right"><button class="btn btn-sm" data-list-del="'+L[0]+'" data-name="'+esc(x.name)+'" title="Удалить">🗑</button></td></tr>';
+    }).join('')||'<tr><td class="muted" style="padding:12px">Список пуст</td></tr>';
+  });
   document.getElementById('ng-cat').innerHTML=D.cats.map(function(c){return '<option>'+c+'</option>';}).join('');
 }
 function renderMachines(){
@@ -354,9 +397,13 @@ document.addEventListener('change',function(e){
       if(!(parseFloat(v)>0)){alert(NUM[0]+' — число больше 0');t.value=old;return;}
       if(!confirm(NUM[0]+' формы '+d.mold+': '+old+' → '+v+NUM[1]+'.\nПоменяется и в справочнике ТПА (форма ввода). Сохранить?')){t.value=old;return;}
       save({action:'costSetMold',id:d.mold,field:d.f,value:v},'✓ '+NUM[0].toLowerCase()+' сохранено');
+    } else if(d.f==='colorPct'||d.f==='packQty'){
+      save({action:'costSetMold',id:d.mold,field:d.f,value:cleanNum(t.value)});
     } else if(d.f==='client'){
       save({action:'costSetMold',id:d.mold,field:'client',value:t.checked?'1':''});
     } else save({action:'costSetMold',id:d.mold,field:d.f,value:t.value});
+  } else if(d.list){
+    save({action:'costSetListItem',list:d.list,name:d.name,price:cleanNum(t.value)},'✓ цена сохранена');
   } else if(d.grade){
     save({action:'costSetPrice',grade:d.grade,price:cleanNum(t.value)},'✓ цена сохранена');
   } else if(d.mach){
@@ -375,6 +422,15 @@ document.addEventListener('click',function(e){
     lsSet('cost_tab',t.dataset.tab);
   } else if(t.dataset.accept){
     save({action:'costAcceptLux',grade:t.dataset.accept},'✓ цена принята');
+  } else if(t.dataset.listAdd){
+    var L=t.dataset.listAdd,pre=L==='color'?'nc':'np';
+    var nm=document.getElementById(pre+'-name').value.trim();
+    if(!nm){alert('Введите название');return;}
+    save({action:'costSetListItem',list:L,name:nm,price:cleanNum(document.getElementById(pre+'-price').value)},'✓ добавлено')
+      .then(function(){document.getElementById(pre+'-name').value='';document.getElementById(pre+'-price').value='';});
+  } else if(t.dataset.listDel){
+    if(confirm('Удалить «'+t.dataset.name+'»? У форм, где он выбран, расчёт покажет ошибку.'))
+      save({action:'costDeleteListItem',list:t.dataset.listDel,name:t.dataset.name},'✓ удалено');
   } else if(t.id==='lux-now'){
     save({action:'costLuxNow'},'✓ цены LUX проверены');
   } else if(t.id==='ng-add'){
@@ -396,17 +452,22 @@ function ndDraft(){
   return {client:ndVal('nd-client').trim(),part:ndVal('nd-part').trim(),machine:ndVal('nd-machine'),grade:ndVal('nd-grade'),
     cycle:parseFloat(cleanNum(ndVal('nd-cycle')))||'',cav:parseFloat(cleanNum(ndVal('nd-cav')))||'',
     weight:parseFloat(cleanNum(ndVal('nd-weight')))||'',clientRaw:document.getElementById('nd-clientraw').checked,
+    color:ndVal('nd-color'),colorPct:parseFloat(cleanNum(ndVal('nd-colorpct')))||'',
+    pack:ndVal('nd-pack'),packQty:parseFloat(cleanNum(ndVal('nd-packqty')))||'',
     note:ndVal('nd-note').trim()};
 }
 function ndCalc(){
   if(!D) return null;
   var d=ndDraft();
-  var c=calcMold({grade:d.grade,machine:d.machine,cycle:d.cycle,cav:d.cav,weight:d.weight,client:d.clientRaw});
+  var c=calcMold({grade:d.grade,machine:d.machine,cycle:d.cycle,cav:d.cav,weight:d.weight,client:d.clientRaw,
+    color:d.color,colorPct:d.colorPct,pack:d.pack,packQty:d.packQty});
   var flags=(document.getElementById('t-margin').checked?' + маржа':'')+(document.getElementById('t-vat').checked?' + НДС':'');
   document.getElementById('nd-res').innerHTML=
     '<div><span class="k">Шт/сутки</span><span class="v">'+(c.perDay?fmt(c.perDay):'—')+'</span></div>'+
     '<div><span class="k">Станок/шт</span><span class="v">'+(c.machPc!=null?fmt(c.machPc,1):'—')+'</span></div>'+
     '<div><span class="k">Сырьё/шт</span><span class="v">'+(c.rawPc!=null?fmt(c.rawPc,1):'—')+'</span></div>'+
+    (d.color?'<div><span class="k">Краситель/шт</span><span class="v">'+fmt(c.colorPc,1)+'</span></div>':'')+
+    (d.pack?'<div><span class="k">Упаковка/шт</span><span class="v">'+fmt(c.packPc,1)+'</span></div>':'')+
     '<div><span class="k">Себестоимость/шт</span><span class="big">'+(c.seb!=null?fmt(c.seb,1)+' сўм':'—')+'</span></div>'+
     '<div><span class="k">Цена/шт'+esc(flags||' (без маржи и НДС)')+'</span><span class="pr">'+(c.price!=null?fmt(c.price,1)+' сўм':'—')+'</span></div>'+
     (c.seb==null&&c.why.length?'<div style="flex-basis:100%;color:#ff9a9a;font-size:12px">Не хватает: '+esc(c.why.join(', '))+'</div>':'');
@@ -415,22 +476,26 @@ function ndCalc(){
 function ndFill(x){
   ndEditId=x?x.draftId:'';
   document.getElementById('nd-title').textContent=x?'Черновик: '+(x.part||'')+(x.client?' · '+x.client:''):'Расчёт для нового клиента';
-  [['nd-client','client'],['nd-part','part'],['nd-cycle','cycle'],['nd-cav','cav'],['nd-weight','weight'],['nd-note','note']]
+  [['nd-client','client'],['nd-part','part'],['nd-cycle','cycle'],['nd-cav','cav'],['nd-weight','weight'],['nd-note','note'],
+   ['nd-colorpct','colorPct'],['nd-packqty','packQty']]
     .forEach(function(p){document.getElementById(p[0]).value=x?x[p[1]]:'';});
-  renderNewSelects(x?x.machine:'',x?x.grade:'');
+  renderNewSelects(x?x.machine:'',x?x.grade:'',x?x.color:'',x?x.pack:'');
   document.getElementById('nd-clientraw').checked=!!(x&&x.clientRaw);
   ndCalc();
 }
-function renderNewSelects(mach,grade){
+function renderNewSelects(mach,grade,color,pack){
   var ms=document.getElementById('nd-machine'),gs=document.getElementById('nd-grade');
-  if(mach===undefined){mach=ms.value;grade=gs.value;}
+  var cs=document.getElementById('nd-color'),ps=document.getElementById('nd-pack');
+  if(mach===undefined){mach=ms.value;grade=gs.value;color=cs.value;pack=ps.value;}
+  cs.innerHTML=opts((D.colors||[]).map(function(x){return x.name;}),color||'','нет');
+  ps.innerHTML=opts((D.packs||[]).map(function(x){return x.name;}),pack||'','нет');
   var lbl={};D.machines.forEach(function(m){lbl[m.id]=m.id+' · '+m.model;});
   ms.innerHTML=opts(D.machines.map(function(m){return m.id;}),mach,'— станок —',lbl);
   var glbl={};D.raw.forEach(function(r){glbl[r.grade]=r.grade+' ('+r.cat+')';});
   gs.innerHTML=opts(D.raw.map(function(r){return r.grade;}),grade,'— марка —',glbl);
 }
 function renderNew(){
-  if(!document.getElementById('nd-machine').options.length) renderNewSelects('','');
+  if(!document.getElementById('nd-machine').options.length) renderNewSelects('','','','');
   else renderNewSelects();
   ndCalc();
   var list=D.drafts||[];
@@ -447,8 +512,8 @@ function renderNew(){
         '<button class="btn btn-sm" data-nd-del="'+esc(x.draftId)+'" title="Удалить черновик">🗑</button>')+'</td></tr>';
   }).join('')||'<tr><td colspan="9" class="muted" style="padding:16px">Черновиков нет</td></tr>';
 }
-['nd-client','nd-part','nd-cycle','nd-cav','nd-weight','nd-note'].forEach(function(id){document.getElementById(id).addEventListener('input',ndCalc);});
-['nd-machine','nd-grade','nd-clientraw'].forEach(function(id){document.getElementById(id).addEventListener('change',ndCalc);});
+['nd-client','nd-part','nd-cycle','nd-cav','nd-weight','nd-note','nd-colorpct','nd-packqty'].forEach(function(id){document.getElementById(id).addEventListener('input',ndCalc);});
+['nd-machine','nd-grade','nd-clientraw','nd-color','nd-pack'].forEach(function(id){document.getElementById(id).addEventListener('change',ndCalc);});
 ['t-margin','t-vat'].forEach(function(id){document.getElementById(id).addEventListener('change',ndCalc);});
 document.addEventListener('click',function(e){
   var t=e.target,ds=t.dataset;
