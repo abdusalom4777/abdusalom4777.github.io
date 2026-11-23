@@ -78,13 +78,14 @@
   .mat-table td { padding: 5px 10px; border-bottom: 1px solid var(--border); }
   .mat-table tr:last-child td { border-bottom: none; }
 </style>
-<script src="/assets/auth.js" data-role="admin"></script>
+<script src="/assets/auth.js" data-role="any"></script>
 </head>
 <body>
 
 <div class="header">
   <div class="header-left">
-    <a href="/home.html" title="Главное меню" style="display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:9px;background:rgba(127,127,127,.15);color:inherit;text-decoration:none;font-size:17px;margin-right:10px;flex-shrink:0">⌂</a>
+    <a id="home-link" href="/home.html" title="Главное меню" style="display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:9px;background:rgba(127,127,127,.15);color:inherit;text-decoration:none;font-size:17px;margin-right:10px;flex-shrink:0">⌂</a>
+    <script>if(!TPA.isAdmin){var hl=document.getElementById("home-link");hl.href="/tpa/index.html";hl.title="Форма ввода";}</script>
     <div>
       <div class="header-title">⚙️ Цех ТПА — Дашборд</div>
       <div class="header-sub" id="hdr-sub">Загрузка данных...</div>

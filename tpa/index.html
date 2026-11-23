@@ -322,7 +322,7 @@
   </div>
   <div class="topbar-right">
     <a id="nav-btn" href="/home.html" style="font-size:12px;font-weight:600;padding:6px 10px;border-radius:8px;background:rgba(127,127,127,.15);color:inherit;text-decoration:none">⌂ Меню</a>
-    <script>if(!TPA.isAdmin){var nb=document.getElementById("nav-btn");nb.textContent="Выйти";nb.href="#";nb.onclick=function(e){e.preventDefault();TPA.logout();};}</script>
+    <script>if(!TPA.isAdmin){var nb=document.getElementById("nav-btn");var db=document.createElement("a");db.href="/tpa/dashboard.html";db.textContent="📊 Дашборд";db.style.cssText=nb.style.cssText;db.style.marginRight="6px";nb.parentNode.insertBefore(db,nb);nb.textContent="Выйти";nb.href="#";nb.onclick=function(e){e.preventDefault();TPA.logout();};}</script>
     <!-- ✅ НОВОЕ: Счётчик неотправленных -->
     <div class="pending-badge" id="pending-badge" onclick="showTab('setup', document.querySelectorAll('.tab')[6])" title="Перейти к синхронизации">
       📤 <span id="pending-count">0</span> не отпр.
@@ -381,7 +381,6 @@
           <optgroup label="Выдув">
             <option>V1 — Juneng 5L</option>
             <option>V2 — Juneng 5L</option>
-            <option>V3 — Eski kok 5L</option>
             <option>V4 — Yashil 2L</option>
             <option>V5 — Juneng 5L</option>
           </optgroup>
@@ -477,7 +476,7 @@
         </optgroup>
         <optgroup label="Выдув">
           <option>V1 — Juneng 5L</option><option>V2 — Juneng 5L</option>
-          <option>V3 — Eski kok 5L</option><option>V4 — Yashil 2L</option>
+          <option>V4 — Yashil 2L</option>
           <option>V5 — Juneng 5L</option>
         </optgroup>
       </select>
@@ -1285,7 +1284,7 @@ var MACHINES=[
   {id:'T5',name:'T5',type:'Yongjian 160'},{id:'T6',name:'T6',type:'Yongjian 160'},
   {id:'T7',name:'T7',type:'Hanplas 130'},{id:'T8',name:'T8',type:'Hanplas 170'},
   {id:'T9',name:'T9',type:'Airfa 220'},{id:'T10',name:'T10',type:'Haida 210'},{id:'V1',name:'V1',type:'Juneng 5L'},
-  {id:'V2',name:'V2',type:'Juneng 5L'},{id:'V3',name:'V3',type:'Eski kok 5L'},
+  {id:'V2',name:'V2',type:'Juneng 5L'},
   {id:'V4',name:'V4',type:'Yashil 2L'},{id:'V5',name:'V5',type:'Juneng 5L'}
 ];
 
