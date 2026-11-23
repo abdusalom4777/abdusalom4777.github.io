@@ -58,6 +58,14 @@ input.s{width:64px;text-align:right}
 .hint{font-size:12px;color:var(--muted);padding:10px 14px;line-height:1.5}
 .grid-form{display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:12px 14px}
 .why{font-size:11px;color:var(--red)}
+.nd label{display:flex;flex-direction:column;gap:4px;font-size:11px;color:var(--muted);font-weight:600}
+.nd label.toggle{flex-direction:row;color:var(--text);font-weight:400;font-size:13px}
+#nd-client,#nd-part{width:170px}
+.nd-res{margin:0 14px;padding:12px 14px;border-radius:10px;background:var(--text);color:#fff;display:flex;gap:22px;flex-wrap:wrap;align-items:baseline}
+.nd-res .k{font-size:11px;opacity:.6;display:block}
+.nd-res .v{font-size:18px;font-variant-numeric:tabular-nums}
+.nd-res .big{font-size:24px;color:#6fcf97}
+.nd-res .pr{font-size:24px;color:#f8d57e}
 @media(max-width:600px){.container{padding:10px}header .t{display:none}}
 </style>
 <script src="/assets/auth.js" data-role="admin"></script>
@@ -79,6 +87,7 @@ input.s{width:64px;text-align:right}
 
   <div class="tabs">
     <button class="tab active" data-tab="molds">Прайс по формам</button>
+    <button class="tab" data-tab="new">Новый расчёт</button>
     <button class="tab" data-tab="raw">Сырьё</button>
     <button class="tab" data-tab="machines">Станки</button>
     <button class="tab" data-tab="settings">Настройки</button>
@@ -111,6 +120,37 @@ input.s{width:64px;text-align:right}
         «Сырьё клиента» — услуга: сырьё привозит клиент, в цене только работа станка.<br>
         Станок с пометкой <span class="tag tag-blue">авто</span> взят из Журнала (последний, на котором шла форма).
       </div>
+    </div>
+  </div>
+
+  <!-- НОВЫЙ РАСЧЁТ -->
+  <div class="panel" id="tab-new">
+    <div class="card">
+      <div class="card-head"><span class="card-title" id="nd-title">Расчёт для нового клиента</span>
+        <button class="btn btn-sm" id="nd-clear">Очистить</button></div>
+      <div class="grid-form nd">
+        <label>Клиент<input id="nd-client" placeholder="Botir aka"></label>
+        <label>Деталь<input id="nd-part" placeholder="Kapsula 32g"></label>
+        <label>Станок<select id="nd-machine"></select></label>
+        <label>Марка сырья<select id="nd-grade"></select></label>
+        <label>Цикл, с<input id="nd-cycle" class="s" inputmode="decimal"></label>
+        <label>Гнёзда<input id="nd-cav" class="s" inputmode="numeric"></label>
+        <label>Вес, г<input id="nd-weight" class="s" inputmode="decimal"></label>
+        <label class="toggle" style="align-self:flex-end"><input type="checkbox" id="nd-clientraw"> сырьё клиента</label>
+        <label style="flex:1;min-width:200px">Комментарий<input id="nd-note" placeholder="тираж, срок, цвет…" style="width:100%"></label>
+      </div>
+      <div class="nd-res" id="nd-res"></div>
+      <div class="grid-form" style="justify-content:flex-end">
+        <button class="btn btn-dark" id="nd-save">💾 Сохранить черновик</button>
+      </div>
+      <div class="hint">Черновики лежат на листе «Новые продукты» и <b>в ТПА не видны</b>. Операторы увидят деталь только после «Одобрить → в ТПА».</div>
+    </div>
+    <div class="card">
+      <div class="card-head"><span class="card-title">Черновики и одобренные</span><span class="muted" id="nd-count"></span></div>
+      <div class="scroll"><table>
+        <thead><tr><th>Дата</th><th>Клиент</th><th>Деталь</th><th>Станок</th><th>Марка</th><th class="num">Себест./шт</th><th class="num">Цена/шт</th><th>Статус</th><th></th></tr></thead>
+        <tbody id="nd-body"></tbody>
+      </table></div>
     </div>
   </div>
 
@@ -233,7 +273,7 @@ function calcMold(m){
 function renderAll(){
   document.getElementById('l-margin').textContent=settingsVal('Маржа %',0)+'%';
   document.getElementById('l-vat').textContent=settingsVal('НДС %',0)+'%';
-  renderMolds();renderRaw();renderMachines();renderSettings();
+  renderMolds();renderRaw();renderMachines();renderSettings();renderNew();
 }
 function opts(list,cur,empty,labels){
   var h='<option value="">'+(empty||'—')+'</option>',found=false;
@@ -349,6 +389,89 @@ document.getElementById('q').addEventListener('input',renderMolds);
 document.getElementById('t-margin').checked=!!lsGet('cost_t-margin','');
 document.getElementById('t-vat').checked=!!lsGet('cost_t-vat','');
 (function(){var tab=lsGet('cost_tab','');var b=tab&&document.querySelector('.tab[data-tab="'+tab+'"]');if(b)b.click();})();
+// ---- новый расчёт (черновики) ----
+var ndEditId='';
+function ndVal(id){return document.getElementById(id).value;}
+function ndDraft(){
+  return {client:ndVal('nd-client').trim(),part:ndVal('nd-part').trim(),machine:ndVal('nd-machine'),grade:ndVal('nd-grade'),
+    cycle:parseFloat(cleanNum(ndVal('nd-cycle')))||'',cav:parseFloat(cleanNum(ndVal('nd-cav')))||'',
+    weight:parseFloat(cleanNum(ndVal('nd-weight')))||'',clientRaw:document.getElementById('nd-clientraw').checked,
+    note:ndVal('nd-note').trim()};
+}
+function ndCalc(){
+  if(!D) return null;
+  var d=ndDraft();
+  var c=calcMold({grade:d.grade,machine:d.machine,cycle:d.cycle,cav:d.cav,weight:d.weight,client:d.clientRaw});
+  var flags=(document.getElementById('t-margin').checked?' + маржа':'')+(document.getElementById('t-vat').checked?' + НДС':'');
+  document.getElementById('nd-res').innerHTML=
+    '<div><span class="k">Шт/сутки</span><span class="v">'+(c.perDay?fmt(c.perDay):'—')+'</span></div>'+
+    '<div><span class="k">Станок/шт</span><span class="v">'+(c.machPc!=null?fmt(c.machPc,1):'—')+'</span></div>'+
+    '<div><span class="k">Сырьё/шт</span><span class="v">'+(c.rawPc!=null?fmt(c.rawPc,1):'—')+'</span></div>'+
+    '<div><span class="k">Себестоимость/шт</span><span class="big">'+(c.seb!=null?fmt(c.seb,1)+' сўм':'—')+'</span></div>'+
+    '<div><span class="k">Цена/шт'+esc(flags||' (без маржи и НДС)')+'</span><span class="pr">'+(c.price!=null?fmt(c.price,1)+' сўм':'—')+'</span></div>'+
+    (c.seb==null&&c.why.length?'<div style="flex-basis:100%;color:#ff9a9a;font-size:12px">Не хватает: '+esc(c.why.join(', '))+'</div>':'');
+  return {d:d,c:c};
+}
+function ndFill(x){
+  ndEditId=x?x.draftId:'';
+  document.getElementById('nd-title').textContent=x?'Черновик: '+(x.part||'')+(x.client?' · '+x.client:''):'Расчёт для нового клиента';
+  [['nd-client','client'],['nd-part','part'],['nd-cycle','cycle'],['nd-cav','cav'],['nd-weight','weight'],['nd-note','note']]
+    .forEach(function(p){document.getElementById(p[0]).value=x?x[p[1]]:'';});
+  renderNewSelects(x?x.machine:'',x?x.grade:'');
+  document.getElementById('nd-clientraw').checked=!!(x&&x.clientRaw);
+  ndCalc();
+}
+function renderNewSelects(mach,grade){
+  var ms=document.getElementById('nd-machine'),gs=document.getElementById('nd-grade');
+  if(mach===undefined){mach=ms.value;grade=gs.value;}
+  var lbl={};D.machines.forEach(function(m){lbl[m.id]=m.id+' · '+m.model;});
+  ms.innerHTML=opts(D.machines.map(function(m){return m.id;}),mach,'— станок —',lbl);
+  var glbl={};D.raw.forEach(function(r){glbl[r.grade]=r.grade+' ('+r.cat+')';});
+  gs.innerHTML=opts(D.raw.map(function(r){return r.grade;}),grade,'— марка —',glbl);
+}
+function renderNew(){
+  if(!document.getElementById('nd-machine').options.length) renderNewSelects('','');
+  else renderNewSelects();
+  ndCalc();
+  var list=D.drafts||[];
+  document.getElementById('nd-count').textContent=list.length?list.length+' шт':'';
+  document.getElementById('nd-body').innerHTML=list.map(function(x){
+    var inTpa=x.status==='в ТПА';
+    return '<tr><td class="muted">'+esc(x.date)+'</td><td>'+esc(x.client||'—')+'</td><td><b>'+esc(x.part)+'</b>'+(x.note?'<div class="muted" style="font-size:11px">'+esc(x.note)+'</div>':'')+'</td>'+
+      '<td>'+esc(x.machine||'—')+'</td><td>'+esc(x.grade||'—')+(x.clientRaw?' <span class="tag tag-blue">клиента</span>':'')+'</td>'+
+      '<td class="num">'+fmt(x.seb,1)+'</td><td class="num price">'+fmt(x.price,1)+'</td>'+
+      '<td>'+(inTpa?'<span class="tag tag-green">в ТПА: '+esc(x.moldId)+'</span>':'<span class="tag tag-amber">черновик</span>')+'</td>'+
+      '<td style="white-space:nowrap">'+(inTpa?'':
+        '<button class="btn btn-sm" data-nd-open="'+esc(x.draftId)+'">Открыть</button> '+
+        '<button class="btn btn-ok btn-sm" data-nd-approve="'+esc(x.draftId)+'">Одобрить → в ТПА</button> '+
+        '<button class="btn btn-sm" data-nd-del="'+esc(x.draftId)+'" title="Удалить черновик">🗑</button>')+'</td></tr>';
+  }).join('')||'<tr><td colspan="9" class="muted" style="padding:16px">Черновиков нет</td></tr>';
+}
+['nd-client','nd-part','nd-cycle','nd-cav','nd-weight','nd-note'].forEach(function(id){document.getElementById(id).addEventListener('input',ndCalc);});
+['nd-machine','nd-grade','nd-clientraw'].forEach(function(id){document.getElementById(id).addEventListener('change',ndCalc);});
+['t-margin','t-vat'].forEach(function(id){document.getElementById(id).addEventListener('change',ndCalc);});
+document.addEventListener('click',function(e){
+  var t=e.target,ds=t.dataset;
+  if(t.id==='nd-clear') ndFill(null);
+  else if(t.id==='nd-save'){
+    var r=ndCalc(); if(!r) return;
+    if(!r.d.part){alert('Укажите деталь');return;}
+    var body={action:'costSaveDraft',draftId:ndEditId,seb:r.c.seb!=null?r.c.seb.toFixed(2):'',price:r.c.price!=null?r.c.price.toFixed(2):''};
+    for(var k in r.d) body[k]=r.d[k];
+    save(body,'✓ черновик сохранён').then(function(){ndFill(null);});
+  } else if(ds.ndOpen){
+    ndFill((D.drafts||[]).find(function(x){return x.draftId===ds.ndOpen;}));
+    window.scrollTo({top:0,behavior:'smooth'});
+  } else if(ds.ndDel){
+    var x=(D.drafts||[]).find(function(y){return y.draftId===ds.ndDel;});
+    if(confirm('Удалить черновик «'+(x?x.part:'')+'»?')) save({action:'costDeleteDraft',draftId:ds.ndDel},'✓ черновик удалён');
+  } else if(ds.ndApprove){
+    var y=(D.drafts||[]).find(function(z){return z.draftId===ds.ndApprove;});
+    var id=prompt('№ пресс-формы для «'+(y?y.part:'')+'».\nПосле этого деталь появится в форме ввода ТПА у операторов.');
+    if(id&&id.trim()) save({action:'costApproveDraft',draftId:ds.ndApprove,moldId:id.trim()},'✓ одобрено, форма в ТПА');
+  }
+});
+
 load();
 </script>
 </body>
