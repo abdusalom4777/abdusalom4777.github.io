@@ -249,8 +249,10 @@ function loadAuthCache() {
   try { return JSON.parse(localStorage.getItem('tpa_auth_cache') || '{}'); } catch(e) { return {}; }
 }
 
-function loginOk(username, role) {
-  sessionStorage.setItem('tpa_session', JSON.stringify({ username: username, role: role }));
+function loginOk(username, role, token) {
+  var sess = { username: username, role: role };
+  if (token) sess.token = token; // для себестоимости (выдаёт Apps Script, 6 часов)
+  sessionStorage.setItem('tpa_session', JSON.stringify(sess));
   redirect(role);
 }
 
@@ -308,7 +310,7 @@ function doLogin() {
           var cache = loadAuthCache();
           cache[username] = { hash: h, role: res.role };
           try { localStorage.setItem('tpa_auth_cache', JSON.stringify(cache)); } catch(e) {}
-          loginOk(username, res.role);
+          loginOk(username, res.role, res.token);
         });
       } else if (res.status === 'locked') {
         showError('🔒 Слишком много попыток. Подождите 10 минут.');
