@@ -107,7 +107,7 @@ input.s{width:64px;text-align:right}
       </table></div>
       <div class="hint">
         Станок/шт = стоимость суток ÷ (часов × 3600 ÷ цикл × гнёзда). Сырьё/шт = вес × цена кг × (1 + угар).<br>
-        ⚠️ <b>Цикл общий с формой ТПА</b>: поменяете здесь — поменяется и при вводе продукции.
+        ⚠️ <b>Цикл, гнёзда и вес общие с формой ТПА</b>: поменяете здесь — поменяется и при вводе продукции.
         «Сырьё клиента» — услуга: сырьё привозит клиент, в цене только работа станка.<br>
         Станок с пометкой <span class="tag tag-blue">авто</span> взят из Журнала (последний, на котором шла форма).
       </div>
@@ -235,9 +235,9 @@ function renderAll(){
   document.getElementById('l-vat').textContent=settingsVal('НДС %',0)+'%';
   renderMolds();renderRaw();renderMachines();renderSettings();
 }
-function opts(list,cur,empty){
+function opts(list,cur,empty,labels){
   var h='<option value="">'+(empty||'—')+'</option>',found=false;
-  list.forEach(function(v){if(v===cur)found=true;h+='<option'+(v===cur?' selected':'')+'>'+esc(v)+'</option>';});
+  list.forEach(function(v){if(v===cur)found=true;h+='<option value="'+esc(v)+'"'+(v===cur?' selected':'')+'>'+esc(labels&&labels[v]||v)+'</option>';});
   if(cur&&!found) h+='<option selected>'+esc(cur)+'</option>';
   return h;
 }
@@ -247,6 +247,7 @@ function renderMolds(){
   var onlyBad=document.getElementById('t-problems').checked;
   var grades=D.raw.map(function(r){return r.grade;});
   var machs=D.machines.map(function(m){return m.id;});
+  var machLbl={};D.machines.forEach(function(m){machLbl[m.id]=m.id+' · '+m.model;});
   var rows=[],bad=0;
   D.molds.forEach(function(m){
     var c=calcMold(m);
@@ -257,11 +258,11 @@ function renderMolds(){
     rows.push('<tr>'+
       '<td><b>'+esc(m.id)+'</b></td>'+
       '<td>'+name+(m.material?'<div class="muted" style="font-size:11px">материал: '+esc(m.material)+'</div>':'')+'</td>'+
-      '<td><select data-mold="'+esc(m.id)+'" data-f="machine">'+opts(machs,m.machine)+'</select>'+(m.machineAuto?' <span class="tag tag-blue">авто</span>':'')+'</td>'+
+      '<td><select data-mold="'+esc(m.id)+'" data-f="machine">'+opts(machs,m.machine,'—',machLbl)+'</select>'+(m.machineAuto?' <span class="tag tag-blue">авто</span>':'')+'</td>'+
       '<td><select data-mold="'+esc(m.id)+'" data-f="grade">'+opts(grades,m.grade)+'</select></td>'+
       '<td class="num"><input class="s" data-mold="'+esc(m.id)+'" data-f="cycle" value="'+esc(m.cycle)+'" inputmode="decimal"></td>'+
-      '<td class="num">'+fmt(m.cav)+'</td>'+
-      '<td class="num">'+fmt(m.weight,2)+'</td>'+
+      '<td class="num"><input class="s" data-mold="'+esc(m.id)+'" data-f="cav" value="'+esc(m.cav)+'" inputmode="numeric"></td>'+
+      '<td class="num"><input class="s" data-mold="'+esc(m.id)+'" data-f="weight" value="'+esc(m.weight)+'" inputmode="decimal"></td>'+
       '<td class="num muted">'+(c.perDay?fmt(c.perDay):'—')+'</td>'+
       '<td class="num">'+(c.machPc!=null?fmt(c.machPc,1):'—')+'</td>'+
       '<td class="num">'+(m.client?'<span class="muted">0</span>':c.rawPc!=null?fmt(c.rawPc,1):'—')+'</td>'+
@@ -307,11 +308,12 @@ document.addEventListener('change',function(e){
   var t=e.target,d=t.dataset;
   if(d.mold){
     var m=D.molds.find(function(x){return x.id===d.mold;});
-    if(d.f==='cycle'){
-      var v=cleanNum(t.value);
-      if(!(parseFloat(v)>0)){alert('Цикл должен быть числом больше 0');t.value=m.cycle;return;}
-      if(!confirm('Цикл формы '+d.mold+': '+m.cycle+' → '+v+' сек.\nОн поменяется и в форме ввода ТПА. Сохранить?')){t.value=m.cycle;return;}
-      save({action:'costSetMold',id:d.mold,field:'cycle',value:v},'✓ цикл сохранён');
+    var NUM={cycle:['Цикл',' сек'],cav:['Гнёзда',''],weight:['Вес',' г']}[d.f];
+    if(NUM){
+      var v=cleanNum(t.value),old=m[d.f];
+      if(!(parseFloat(v)>0)){alert(NUM[0]+' — число больше 0');t.value=old;return;}
+      if(!confirm(NUM[0]+' формы '+d.mold+': '+old+' → '+v+NUM[1]+'.\nПоменяется и в справочнике ТПА (форма ввода). Сохранить?')){t.value=old;return;}
+      save({action:'costSetMold',id:d.mold,field:d.f,value:v},'✓ '+NUM[0].toLowerCase()+' сохранено');
     } else if(d.f==='client'){
       save({action:'costSetMold',id:d.mold,field:'client',value:t.checked?'1':''});
     } else save({action:'costSetMold',id:d.mold,field:d.f,value:t.value});
