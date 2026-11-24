@@ -18,7 +18,7 @@ header{background:var(--text);color:#fff;padding:0 16px;height:50px;display:flex
 .home{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:9px;background:rgba(255,255,255,.15);color:inherit;text-decoration:none;font-size:17px;flex-shrink:0}
 #sync{font-size:11px;opacity:.7;white-space:nowrap}
 #sync.ok{color:#6fcf97;opacity:1}#sync.err{color:#ff8a8a;opacity:1}
-.container{max-width:1200px;margin:0 auto;padding:16px}
+.container{max-width:1500px;margin:0 auto;padding:16px}
 .tabs{display:flex;background:var(--surface);border-radius:10px;padding:4px;margin-bottom:16px;border:1px solid var(--border);gap:2px;overflow-x:auto}
 .tab{flex:1;padding:9px 12px;font-size:13px;font-weight:500;cursor:pointer;border:none;background:none;color:var(--muted);border-radius:7px;font-family:inherit;white-space:nowrap}
 .tab.active{background:var(--text);color:#fff}
@@ -31,6 +31,20 @@ table{width:100%;border-collapse:collapse;font-size:13px}
 th{text-align:left;padding:8px 10px;border-bottom:1px solid var(--border);font-size:11px;font-weight:600;color:var(--muted);background:var(--surface2);white-space:nowrap;position:sticky;top:0}
 td{padding:7px 10px;border-bottom:1px solid var(--border);vertical-align:middle}
 tr:last-child td{border-bottom:none}
+th+th,td+td{border-left:1px solid rgba(0,0,0,.12)}
+tbody tr:nth-child(even) td{background:#fbfaf7}
+#molds-tbl td{vertical-align:top;padding:8px}
+#molds-tbl select{width:100%;max-width:170px;padding:5px 6px;font-size:12px}
+#molds-tbl .stack{display:flex;flex-direction:column;gap:5px}
+#molds-tbl .trio{display:grid;grid-template-columns:repeat(3,58px);gap:4px}
+#molds-tbl .trio label{font-size:10px;color:var(--muted);display:flex;flex-direction:column;gap:2px}
+#molds-tbl .trio input{width:58px;padding:5px;font-size:12px;text-align:right}
+#molds-tbl .line{display:flex;gap:4px;align-items:center}
+#molds-tbl .line select{flex:1;min-width:0}
+#molds-tbl .bd{font-size:12px;line-height:1.7;white-space:nowrap}
+#molds-tbl .bd b{float:right;margin-left:10px;font-variant-numeric:tabular-nums;font-weight:500}
+#molds-tbl .sm{font-size:11px;color:var(--muted)}
+#molds-tbl .total,#molds-tbl .price{font-size:15px}
 .num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
 .muted{color:var(--muted)}
 input,select{padding:6px 8px;border:1px solid var(--border);border-radius:7px;background:var(--surface2);color:var(--text);font-size:13px;font-family:inherit;outline:none}
@@ -111,14 +125,13 @@ input.pend{background:var(--amber-bg);border-color:var(--amber);font-weight:600}
         </div>
         <span class="muted" id="molds-count"></span>
       </div>
-      <div class="scroll"><table>
+      <div class="scroll"><table id="molds-tbl">
         <thead><tr>
-          <th>№</th><th>Название</th><th>Станок</th><th>Марка</th>
-          <th class="num">Цикл, с</th><th class="num">Гнёзд</th><th class="num">Вес, г</th>
-          <th class="num">Шт/сутки</th><th class="num">Станок/шт</th><th class="num">Сырьё/шт</th><th title="Сырьё привозит клиент — считаем только работу станка">Сырьё клиента</th><th>Краситель, % от веса</th><th>Упаковка, шт в ней</th><th class="num">Краск.+упак./шт</th>
+          <th>Форма</th><th>Станок · марка</th><th>Цикл · гнёзда · вес</th>
+          <th>Краситель % · упаковка шт</th><th>На 1 шт, сўм</th>
           <th class="num">Себест./шт</th><th class="num">Цена/шт</th>
         </tr></thead>
-        <tbody id="molds-body"><tr><td colspan="16" class="muted" style="padding:20px">Загрузка…</td></tr></tbody>
+        <tbody id="molds-body"><tr><td colspan="7" class="muted" style="padding:20px">Загрузка…</td></tr></tbody>
       </table></div>
       <div class="hint">
         Станок/шт = стоимость суток ÷ (часов × 3600 ÷ цикл × гнёзда). Сырьё/шт = вес × цена кг × (1 + угар).<br>
@@ -346,29 +359,38 @@ function renderMolds(){
     if(onlyBad&&c.seb!=null) return;
     var name=m.label&&m.article?esc(m.article)+' <span class="muted">· '+esc(m.label)+'</span>':esc(m.article||m.label||'—');
     rows.push('<tr>'+
-      '<td><b>'+esc(m.id)+'</b>'+(pm?'<div style="margin-top:4px;white-space:nowrap"><button class="btn btn-ok btn-sm" data-apply="'+esc(m.id)+'" title="Записать в справочник ТПА">✓ в ТПА</button> <button class="btn btn-sm" data-discard="'+esc(m.id)+'" title="Отменить черновик">✕</button></div>':'')+'</td>'+
-      '<td>'+name+(m.material?'<div class="muted" style="font-size:11px">материал: '+esc(m.material)+'</div>':'')+'</td>'+
-      '<td><select data-mold="'+esc(m.id)+'" data-f="machine">'+opts(machs,m.machine,'—',machLbl)+'</select>'+(m.machineAuto?' <span class="tag tag-blue">авто</span>':'')+'</td>'+
-      '<td><select data-mold="'+esc(m.id)+'" data-f="grade">'+opts(grades,m.grade)+'</select></td>'+
-      '<td class="num">'+inp('cycle','s','decimal')+'</td>'+
-      '<td class="num">'+inp('cav','s','numeric')+'</td>'+
-      '<td class="num">'+inp('weight','s','decimal')+'</td>'+
-      '<td class="num muted">'+(c.perDay?fmt(c.perDay):'—')+'</td>'+
-      '<td class="num">'+(c.machPc!=null?fmt(c.machPc,1):'—')+'</td>'+
-      '<td class="num">'+(m.client?'<span class="muted">0</span>':c.rawPc!=null?fmt(c.rawPc,1):'—')+'</td>'+
-      '<td style="text-align:center"><input type="checkbox" data-mold="'+esc(m.id)+'" data-f="client"'+(m.client?' checked':'')+'></td>'+
-      '<td style="white-space:nowrap"><select data-mold="'+esc(m.id)+'" data-f="color">'+opts(colorNames,m.color,'нет')+'</select> '+
-        (m.color?'<input class="xs" data-mold="'+esc(m.id)+'" data-f="colorPct" value="'+esc(m.colorPct)+'" inputmode="decimal" placeholder="%">':'')+'</td>'+
-      '<td style="white-space:nowrap"><select data-mold="'+esc(m.id)+'" data-f="pack">'+opts(packNames,m.pack,'нет')+'</select> '+
-        (m.pack?'<input class="xs" data-mold="'+esc(m.id)+'" data-f="packQty" value="'+esc(m.packQty)+'" inputmode="numeric" placeholder="шт">':'')+'</td>'+
-      '<td class="num">'+((c.colorPc||c.packPc)?fmt(c.colorPc+c.packPc,1):'<span class="muted">—</span>')+'</td>'+
-      '<td class="num total">'+(c.seb!=null?fmt(c.seb,1):'<span class="why">'+esc(c.why.join(', '))+'</span>')+
+      // 1. форма
+      '<td style="min-width:150px"><b>'+esc(m.id)+'</b><div>'+name+'</div>'+
+        (m.material?'<div class="sm">материал: '+esc(m.material)+'</div>':'')+
+        (pm?'<div style="margin-top:6px;white-space:nowrap"><button class="btn btn-ok btn-sm" data-apply="'+esc(m.id)+'" title="Записать в справочник ТПА">✓ в ТПА</button> <button class="btn btn-sm" data-discard="'+esc(m.id)+'" title="Отменить черновик">✕</button></div>':'')+'</td>'+
+      // 2. станок + марка
+      '<td><div class="stack"><select data-mold="'+esc(m.id)+'" data-f="machine">'+opts(machs,m.machine,'— станок —',machLbl)+'</select>'+
+        '<select data-mold="'+esc(m.id)+'" data-f="grade">'+opts(grades,m.grade,'— марка —')+'</select>'+
+        (m.machineAuto?'<span class="sm"><span class="tag tag-blue">авто</span> станок из Журнала</span>':'')+'</div></td>'+
+      // 3. цикл / гнёзда / вес
+      '<td><div class="trio"><label>цикл, с'+inp('cycle','s','decimal')+'</label><label>гнёзд'+inp('cav','s','numeric')+'</label><label>вес, г'+inp('weight','s','decimal')+'</label></div>'+
+        '<div class="sm" style="margin-top:4px">'+(c.perDay?fmt(c.perDay)+' шт/сутки':'')+'</div></td>'+
+      // 4. краситель + упаковка
+      '<td><div class="stack">'+
+        '<div class="line"><select data-mold="'+esc(m.id)+'" data-f="color">'+opts(colorNames,m.color,'без красителя')+'</select>'+
+          (m.color?'<input class="xs" data-mold="'+esc(m.id)+'" data-f="colorPct" value="'+esc(m.colorPct)+'" inputmode="decimal" placeholder="%" title="% от веса">':'')+'</div>'+
+        '<div class="line"><select data-mold="'+esc(m.id)+'" data-f="pack">'+opts(packNames,m.pack,'без упаковки')+'</select>'+
+          (m.pack?'<input class="xs" data-mold="'+esc(m.id)+'" data-f="packQty" value="'+esc(m.packQty)+'" inputmode="numeric" placeholder="шт" title="штук в упаковке">':'')+'</div>'+
+        '<label class="sm" style="display:flex;gap:5px;align-items:center;cursor:pointer"><input type="checkbox" data-mold="'+esc(m.id)+'" data-f="client"'+(m.client?' checked':'')+'> сырьё клиента</label>'+
+      '</div></td>'+
+      // 5. разбивка на 1 шт
+      '<td class="bd">станок <b>'+(c.machPc!=null?fmt(c.machPc,1):'—')+'</b><br>'+
+        'сырьё <b>'+(m.client?'0':c.rawPc!=null?fmt(c.rawPc,1):'—')+'</b><br>'+
+        'краситель <b>'+(c.colorPc?fmt(c.colorPc,1):'—')+'</b><br>'+
+        'упаковка <b>'+(c.packPc?fmt(c.packPc,1):'—')+'</b></td>'+
+      // 6–7. итог
+      '<td class="num total">'+(c.seb!=null?fmt(c.seb,1):'<span class="why" style="white-space:normal;display:block;max-width:140px">'+esc(c.why.join(', '))+'</span>')+
         (cOld&&cOld.seb!=null?'<span class="was">было '+fmt(cOld.seb,1)+'</span>':'')+'</td>'+
       '<td class="num price">'+(c.price!=null?fmt(c.price,1):'—')+
         (cOld&&cOld.price!=null?'<span class="was">было '+fmt(cOld.price,1)+'</span>':'')+'</td>'+
     '</tr>');
   });
-  document.getElementById('molds-body').innerHTML=rows.join('')||'<tr><td colspan="16" class="muted" style="padding:20px">Ничего не найдено</td></tr>';
+  document.getElementById('molds-body').innerHTML=rows.join('')||'<tr><td colspan="7" class="muted" style="padding:20px">Ничего не найдено</td></tr>';
   document.getElementById('molds-count').innerHTML=D.molds.length+' форм'+(bad?' · <span class="tag tag-red">без расчёта: '+bad+'</span>':' · <span class="tag tag-green">все посчитаны</span>');
 }
 function renderRaw(){
