@@ -128,7 +128,7 @@ input.pend{background:var(--amber-bg);border-color:var(--amber);font-weight:600}
       <div class="scroll"><table id="molds-tbl">
         <thead><tr>
           <th>Форма</th><th>Станок · марка</th><th>Цикл · гнёзда · вес</th>
-          <th>Краситель % · упаковка шт</th><th>На 1 шт, сўм</th>
+          <th>Краситель % · упаковка шт · пресс-форма</th><th>На 1 шт, сўм</th>
           <th class="num">Себест./шт</th><th class="num">Цена/шт</th>
         </tr></thead>
         <tbody id="molds-body"><tr><td colspan="7" class="muted" style="padding:20px">Загрузка…</td></tr></tbody>
@@ -161,6 +161,8 @@ input.pend{background:var(--amber-bg);border-color:var(--amber);font-weight:600}
         <label>% красителя<input id="nd-colorpct" class="s" inputmode="decimal" placeholder="2"></label>
         <label>Упаковка<select id="nd-pack"></select></label>
         <label>Шт в упаковке<input id="nd-packqty" class="s" inputmode="numeric"></label>
+        <label>Цена формы, $<input id="nd-moldusd" class="s" inputmode="decimal" placeholder="—"></label>
+        <label>Ресурс, циклов<input id="nd-moldlife" class="s" style="width:90px" inputmode="numeric" placeholder="1 000 000"></label>
         <label style="flex:1;min-width:200px">Комментарий<input id="nd-note" placeholder="тираж, срок, цвет…" style="width:100%"></label>
       </div>
       <div class="nd-res" id="nd-res"></div>
@@ -311,12 +313,19 @@ function calcMold(m){
     else if(!(m.packQty>0)) why.push('нет штук в упаковке');
     else packPc=pk.price/m.packQty;
   }
-  var extraOk=why.filter(function(w){return /красител|упаковк/.test(w);}).length===0;
-  var seb=(machPc!=null&&rawPc!=null&&extraOk)?machPc+rawPc+colorPc+packPc:null;
+  // пресс-форма: только если указана цена формы ($ × курс ÷ (ресурс × гнёзда))
+  var moldPc=0;
+  if(m.moldUsd>0){
+    var kurs=settingsVal('Курс $',0),life=m.moldLife>0?m.moldLife:settingsVal('Ресурс формы по умолч., циклов',1000000);
+    if(!(kurs>0)) why.push('нет курса $ в настройках');
+    else if(m.cav>0&&life>0) moldPc=m.moldUsd*kurs/(life*m.cav);
+  }
+  var extraOk=why.filter(function(w){return /красител|упаковк|курса/.test(w);}).length===0;
+  var seb=(machPc!=null&&rawPc!=null&&extraOk)?machPc+rawPc+colorPc+packPc+moldPc:null;
   var k=1;
   if(document.getElementById('t-margin').checked) k*=1+settingsVal('Маржа %',0)/100;
   if(document.getElementById('t-vat').checked) k*=1+settingsVal('НДС %',0)/100;
-  return {why:why,perDay:perDay,machPc:machPc,rawPc:rawPc,colorPc:colorPc,packPc:packPc,seb:seb,price:seb!=null?seb*k:null};
+  return {why:why,perDay:perDay,machPc:machPc,rawPc:rawPc,colorPc:colorPc,packPc:packPc,moldPc:moldPc,seb:seb,price:seb!=null?seb*k:null};
 }
 
 // ---- отрисовка ----
@@ -376,13 +385,16 @@ function renderMolds(){
           (m.color?'<input class="xs" data-mold="'+esc(m.id)+'" data-f="colorPct" value="'+esc(m.colorPct)+'" inputmode="decimal" placeholder="%" title="% от веса">':'')+'</div>'+
         '<div class="line"><select data-mold="'+esc(m.id)+'" data-f="pack">'+opts(packNames,m.pack,'без упаковки')+'</select>'+
           (m.pack?'<input class="xs" data-mold="'+esc(m.id)+'" data-f="packQty" value="'+esc(m.packQty)+'" inputmode="numeric" placeholder="шт" title="штук в упаковке">':'')+'</div>'+
+        '<div class="line sm" title="Цена формы в $ и ресурс в циклах. Пусто — форма в цену не входит">форма $<input class="xs" data-mold="'+esc(m.id)+'" data-f="moldUsd" value="'+esc(m.moldUsd)+'" inputmode="decimal" placeholder="—">'+
+          (m.moldUsd>0?'ресурс<input class="s" style="width:76px" data-mold="'+esc(m.id)+'" data-f="moldLife" value="'+esc(m.moldLife)+'" inputmode="numeric" placeholder="'+fmt(settingsVal('Ресурс формы по умолч., циклов',1000000))+'">':'')+'</div>'+
         '<label class="sm" style="display:flex;gap:5px;align-items:center;cursor:pointer"><input type="checkbox" data-mold="'+esc(m.id)+'" data-f="client"'+(m.client?' checked':'')+'> сырьё клиента</label>'+
       '</div></td>'+
       // 5. разбивка на 1 шт
       '<td class="bd">станок <b>'+(c.machPc!=null?fmt(c.machPc,1):'—')+'</b><br>'+
         'сырьё <b>'+(m.client?'0':c.rawPc!=null?fmt(c.rawPc,1):'—')+'</b><br>'+
         'краситель <b>'+(c.colorPc?fmt(c.colorPc,1):'—')+'</b><br>'+
-        'упаковка <b>'+(c.packPc?fmt(c.packPc,1):'—')+'</b></td>'+
+        'упаковка <b>'+(c.packPc?fmt(c.packPc,1):'—')+'</b><br>'+
+        'пресс-форма <b>'+(c.moldPc?fmt(c.moldPc,2):'—')+'</b></td>'+
       // 6–7. итог
       '<td class="num total">'+(c.seb!=null?fmt(c.seb,1):'<span class="why" style="white-space:normal;display:block;max-width:140px">'+esc(c.why.join(', '))+'</span>')+
         (cOld&&cOld.seb!=null?'<span class="was">было '+fmt(cOld.seb,1)+'</span>':'')+'</td>'+
@@ -438,7 +450,7 @@ document.addEventListener('change',function(e){
       var v=cleanNum(t.value);
       if(v!==''&&!(parseFloat(v)>0)){alert(NUM[0]+' — число больше 0');renderMolds();return;}
       save({action:'costPendMold',id:d.mold,field:d.f,value:v},'✏️ в черновике (ТПА не изменён)');
-    } else if(d.f==='colorPct'||d.f==='packQty'){
+    } else if(d.f==='colorPct'||d.f==='packQty'||d.f==='moldUsd'||d.f==='moldLife'){
       save({action:'costSetMold',id:d.mold,field:d.f,value:cleanNum(t.value)});
     } else if(d.f==='client'){
       save({action:'costSetMold',id:d.mold,field:'client',value:t.checked?'1':''});
@@ -504,13 +516,14 @@ function ndDraft(){
     weight:parseFloat(cleanNum(ndVal('nd-weight')))||'',clientRaw:document.getElementById('nd-clientraw').checked,
     color:ndVal('nd-color'),colorPct:parseFloat(cleanNum(ndVal('nd-colorpct')))||'',
     pack:ndVal('nd-pack'),packQty:parseFloat(cleanNum(ndVal('nd-packqty')))||'',
+    moldUsd:parseFloat(cleanNum(ndVal('nd-moldusd')))||'',moldLife:parseFloat(cleanNum(ndVal('nd-moldlife')))||'',
     note:ndVal('nd-note').trim()};
 }
 function ndCalc(){
   if(!D) return null;
   var d=ndDraft();
   var c=calcMold({grade:d.grade,machine:d.machine,cycle:d.cycle,cav:d.cav,weight:d.weight,client:d.clientRaw,
-    color:d.color,colorPct:d.colorPct,pack:d.pack,packQty:d.packQty});
+    color:d.color,colorPct:d.colorPct,pack:d.pack,packQty:d.packQty,moldUsd:d.moldUsd,moldLife:d.moldLife});
   var flags=(document.getElementById('t-margin').checked?' + маржа':'')+(document.getElementById('t-vat').checked?' + НДС':'');
   document.getElementById('nd-res').innerHTML=
     '<div><span class="k">Шт/сутки</span><span class="v">'+(c.perDay?fmt(c.perDay):'—')+'</span></div>'+
@@ -518,6 +531,7 @@ function ndCalc(){
     '<div><span class="k">Сырьё/шт</span><span class="v">'+(c.rawPc!=null?fmt(c.rawPc,1):'—')+'</span></div>'+
     (d.color?'<div><span class="k">Краситель/шт</span><span class="v">'+fmt(c.colorPc,1)+'</span></div>':'')+
     (d.pack?'<div><span class="k">Упаковка/шт</span><span class="v">'+fmt(c.packPc,1)+'</span></div>':'')+
+    (d.moldUsd?'<div><span class="k">Пресс-форма/шт</span><span class="v">'+fmt(c.moldPc,2)+'</span></div>':'')+
     '<div><span class="k">Себестоимость/шт</span><span class="big">'+(c.seb!=null?fmt(c.seb,1)+' сўм':'—')+'</span></div>'+
     '<div><span class="k">Цена/шт'+esc(flags||' (без маржи и НДС)')+'</span><span class="pr">'+(c.price!=null?fmt(c.price,1)+' сўм':'—')+'</span></div>'+
     (c.seb==null&&c.why.length?'<div style="flex-basis:100%;color:#ff9a9a;font-size:12px">Не хватает: '+esc(c.why.join(', '))+'</div>':'');
@@ -527,7 +541,7 @@ function ndFill(x){
   ndEditId=x?x.draftId:'';
   document.getElementById('nd-title').textContent=x?'Черновик: '+(x.part||'')+(x.client?' · '+x.client:''):'Расчёт для нового клиента';
   [['nd-client','client'],['nd-part','part'],['nd-cycle','cycle'],['nd-cav','cav'],['nd-weight','weight'],['nd-note','note'],
-   ['nd-colorpct','colorPct'],['nd-packqty','packQty']]
+   ['nd-colorpct','colorPct'],['nd-packqty','packQty'],['nd-moldusd','moldUsd'],['nd-moldlife','moldLife']]
     .forEach(function(p){document.getElementById(p[0]).value=x?x[p[1]]:'';});
   renderNewSelects(x?x.machine:'',x?x.grade:'',x?x.color:'',x?x.pack:'');
   document.getElementById('nd-clientraw').checked=!!(x&&x.clientRaw);
@@ -562,7 +576,7 @@ function renderNew(){
         '<button class="btn btn-sm" data-nd-del="'+esc(x.draftId)+'" title="Удалить черновик">🗑</button>')+'</td></tr>';
   }).join('')||'<tr><td colspan="9" class="muted" style="padding:16px">Черновиков нет</td></tr>';
 }
-['nd-client','nd-part','nd-cycle','nd-cav','nd-weight','nd-note','nd-colorpct','nd-packqty'].forEach(function(id){document.getElementById(id).addEventListener('input',ndCalc);});
+['nd-client','nd-part','nd-cycle','nd-cav','nd-weight','nd-note','nd-colorpct','nd-packqty','nd-moldusd','nd-moldlife'].forEach(function(id){document.getElementById(id).addEventListener('input',ndCalc);});
 ['nd-machine','nd-grade','nd-clientraw','nd-color','nd-pack'].forEach(function(id){document.getElementById(id).addEventListener('change',ndCalc);});
 ['t-margin','t-vat'].forEach(function(id){document.getElementById(id).addEventListener('change',ndCalc);});
 document.addEventListener('click',function(e){
