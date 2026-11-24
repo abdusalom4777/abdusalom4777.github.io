@@ -38,6 +38,9 @@ input:focus,select:focus{border-color:var(--text);background:var(--surface)}
 input.n{width:96px;text-align:right}
 input.s{width:64px;text-align:right}
 input.xs{width:52px;text-align:right}
+input.pend{background:var(--amber-bg);border-color:var(--amber);font-weight:600}
+.was{display:block;font-size:10px;color:var(--muted);font-weight:400}
+#pend-bar{display:none;margin:0 0 12px;padding:10px 14px;border-radius:10px;background:var(--amber-bg);color:var(--amber);font-size:13px;align-items:center;gap:10px;flex-wrap:wrap}
 .btn{padding:7px 14px;border-radius:8px;border:1px solid var(--border);font-family:inherit;font-size:13px;font-weight:500;cursor:pointer;background:var(--surface);color:var(--text);white-space:nowrap}
 .btn:hover{background:var(--surface2)}
 .btn-dark{background:var(--text);color:#fff;border-color:transparent}
@@ -96,6 +99,7 @@ input.xs{width:52px;text-align:right}
 
   <!-- ПРАЙС -->
   <div class="panel active" id="tab-molds">
+    <div id="pend-bar"><b>✏️ Черновик правок: <span id="pend-n"></span></b><span>справочник ТПА ещё не изменён — цены посчитаны по черновику для согласования с клиентом.</span><span style="flex:1"></span><button class="btn btn-ok btn-sm" data-apply="ALL">✓ Применить все в ТПА</button><button class="btn btn-sm" data-discard="ALL">✕ Отменить все</button></div>
     <div class="card">
       <div class="card-head">
         <div class="toolbar">
@@ -103,6 +107,7 @@ input.xs{width:52px;text-align:right}
           <label class="toggle"><input type="checkbox" id="t-margin"> + маржа <b id="l-margin"></b></label>
           <label class="toggle"><input type="checkbox" id="t-vat"> + НДС <b id="l-vat"></b></label>
           <label class="toggle"><input type="checkbox" id="t-problems"> только с ошибками</label>
+          <label class="toggle"><input type="checkbox" id="t-pending"> только черновик</label>
         </div>
         <span class="muted" id="molds-count"></span>
       </div>
@@ -117,7 +122,8 @@ input.xs{width:52px;text-align:right}
       </table></div>
       <div class="hint">
         Станок/шт = стоимость суток ÷ (часов × 3600 ÷ цикл × гнёзда). Сырьё/шт = вес × цена кг × (1 + угар).<br>
-        ⚠️ <b>Цикл, гнёзда и вес общие с формой ТПА</b>: поменяете здесь — поменяется и при вводе продукции.
+        ✏️ <b>Цикл, гнёзда и вес</b> меняются сначала <b>черновиком</b> (жёлтые клетки): цена пересчитана, а справочник ТПА — нет.
+        Согласовали с клиентом — «✓ в ТПА» (беловик). Передумали — «✕».<br>
         «Сырьё клиента» — услуга: сырьё привозит клиент, в цене только работа станка.<br>
         Станок с пометкой <span class="tag tag-blue">авто</span> взят из Журнала (последний, на котором шла форма).
       </div>
@@ -320,21 +326,33 @@ function renderMolds(){
   var machs=D.machines.map(function(m){return m.id;});
   var machLbl={};D.machines.forEach(function(m){machLbl[m.id]=m.id+' · '+m.model;});
   var colorNames=(D.colors||[]).map(function(x){return x.name;}),packNames=(D.packs||[]).map(function(x){return x.name;});
-  var rows=[],bad=0;
-  D.molds.forEach(function(m){
-    var c=calcMold(m);
+  var rows=[],bad=0,onlyPend=document.getElementById('t-pending').checked;
+  var pend={};(D.pending||[]).forEach(function(p){(pend[p.id]=pend[p.id]||{})[p.field]=p;});
+  var pendIds=Object.keys(pend);
+  document.getElementById('pend-bar').style.display=pendIds.length?'flex':'none';
+  document.getElementById('pend-n').textContent=pendIds.length+' форм';
+  D.molds.forEach(function(m0){
+    var pm=pend[m0.id],m=m0;
+    if(pm){m={};for(var k in m0)m[k]=m0[k];for(var f in pm)m[f]=pm[f].now;}
+    if(onlyPend&&!pm) return;
+    var c=calcMold(m),cOld=pm?calcMold(m0):null;
+    function inp(f,cls,mode){
+      var p=pm&&pm[f];
+      return '<input class="'+cls+(p?' pend':'')+'" data-mold="'+esc(m.id)+'" data-f="'+f+'" value="'+esc(m[f])+'" inputmode="'+mode+'"'+
+        (p?' title="В справочнике ТПА сейчас: '+esc(p.was)+'"':'')+'>'+(p?'<span class="was">в ТПА: '+esc(p.was)+'</span>':'');
+    }
     if(c.seb==null) bad++;
     if(q&&(m.id+' '+m.label+' '+m.article).toLowerCase().indexOf(q)<0) return;
     if(onlyBad&&c.seb!=null) return;
     var name=m.label&&m.article?esc(m.article)+' <span class="muted">· '+esc(m.label)+'</span>':esc(m.article||m.label||'—');
     rows.push('<tr>'+
-      '<td><b>'+esc(m.id)+'</b></td>'+
+      '<td><b>'+esc(m.id)+'</b>'+(pm?'<div style="margin-top:4px;white-space:nowrap"><button class="btn btn-ok btn-sm" data-apply="'+esc(m.id)+'" title="Записать в справочник ТПА">✓ в ТПА</button> <button class="btn btn-sm" data-discard="'+esc(m.id)+'" title="Отменить черновик">✕</button></div>':'')+'</td>'+
       '<td>'+name+(m.material?'<div class="muted" style="font-size:11px">материал: '+esc(m.material)+'</div>':'')+'</td>'+
       '<td><select data-mold="'+esc(m.id)+'" data-f="machine">'+opts(machs,m.machine,'—',machLbl)+'</select>'+(m.machineAuto?' <span class="tag tag-blue">авто</span>':'')+'</td>'+
       '<td><select data-mold="'+esc(m.id)+'" data-f="grade">'+opts(grades,m.grade)+'</select></td>'+
-      '<td class="num"><input class="s" data-mold="'+esc(m.id)+'" data-f="cycle" value="'+esc(m.cycle)+'" inputmode="decimal"></td>'+
-      '<td class="num"><input class="s" data-mold="'+esc(m.id)+'" data-f="cav" value="'+esc(m.cav)+'" inputmode="numeric"></td>'+
-      '<td class="num"><input class="s" data-mold="'+esc(m.id)+'" data-f="weight" value="'+esc(m.weight)+'" inputmode="decimal"></td>'+
+      '<td class="num">'+inp('cycle','s','decimal')+'</td>'+
+      '<td class="num">'+inp('cav','s','numeric')+'</td>'+
+      '<td class="num">'+inp('weight','s','decimal')+'</td>'+
       '<td class="num muted">'+(c.perDay?fmt(c.perDay):'—')+'</td>'+
       '<td class="num">'+(c.machPc!=null?fmt(c.machPc,1):'—')+'</td>'+
       '<td class="num">'+(m.client?'<span class="muted">0</span>':c.rawPc!=null?fmt(c.rawPc,1):'—')+'</td>'+
@@ -344,8 +362,10 @@ function renderMolds(){
       '<td style="white-space:nowrap"><select data-mold="'+esc(m.id)+'" data-f="pack">'+opts(packNames,m.pack,'нет')+'</select> '+
         (m.pack?'<input class="xs" data-mold="'+esc(m.id)+'" data-f="packQty" value="'+esc(m.packQty)+'" inputmode="numeric" placeholder="шт">':'')+'</td>'+
       '<td class="num">'+((c.colorPc||c.packPc)?fmt(c.colorPc+c.packPc,1):'<span class="muted">—</span>')+'</td>'+
-      '<td class="num total">'+(c.seb!=null?fmt(c.seb,1):'<span class="why">'+esc(c.why.join(', '))+'</span>')+'</td>'+
-      '<td class="num price">'+(c.price!=null?fmt(c.price,1):'—')+'</td>'+
+      '<td class="num total">'+(c.seb!=null?fmt(c.seb,1):'<span class="why">'+esc(c.why.join(', '))+'</span>')+
+        (cOld&&cOld.seb!=null?'<span class="was">было '+fmt(cOld.seb,1)+'</span>':'')+'</td>'+
+      '<td class="num price">'+(c.price!=null?fmt(c.price,1):'—')+
+        (cOld&&cOld.price!=null?'<span class="was">было '+fmt(cOld.price,1)+'</span>':'')+'</td>'+
     '</tr>');
   });
   document.getElementById('molds-body').innerHTML=rows.join('')||'<tr><td colspan="16" class="muted" style="padding:20px">Ничего не найдено</td></tr>';
@@ -393,10 +413,9 @@ document.addEventListener('change',function(e){
     var m=D.molds.find(function(x){return x.id===d.mold;});
     var NUM={cycle:['Цикл',' сек'],cav:['Гнёзда',''],weight:['Вес',' г']}[d.f];
     if(NUM){
-      var v=cleanNum(t.value),old=m[d.f];
-      if(!(parseFloat(v)>0)){alert(NUM[0]+' — число больше 0');t.value=old;return;}
-      if(!confirm(NUM[0]+' формы '+d.mold+': '+old+' → '+v+NUM[1]+'.\nПоменяется и в справочнике ТПА (форма ввода). Сохранить?')){t.value=old;return;}
-      save({action:'costSetMold',id:d.mold,field:d.f,value:v},'✓ '+NUM[0].toLowerCase()+' сохранено');
+      var v=cleanNum(t.value);
+      if(v!==''&&!(parseFloat(v)>0)){alert(NUM[0]+' — число больше 0');renderMolds();return;}
+      save({action:'costPendMold',id:d.mold,field:d.f,value:v},'✏️ в черновике (ТПА не изменён)');
     } else if(d.f==='colorPct'||d.f==='packQty'){
       save({action:'costSetMold',id:d.mold,field:d.f,value:cleanNum(t.value)});
     } else if(d.f==='client'){
@@ -412,7 +431,7 @@ document.addEventListener('change',function(e){
     save({action:'costSetSetting',name:d.set,value:cleanNum(t.value)});
   } else if(t.id==='t-margin'||t.id==='t-vat'){
     lsSet('cost_'+t.id,t.checked?'1':'');renderMolds();
-  } else if(t.id==='t-problems') renderMolds();
+  } else if(t.id==='t-problems'||t.id==='t-pending') renderMolds();
 });
 document.addEventListener('click',function(e){
   var t=e.target;
@@ -422,6 +441,15 @@ document.addEventListener('click',function(e){
     lsSet('cost_tab',t.dataset.tab);
   } else if(t.dataset.accept){
     save({action:'costAcceptLux',grade:t.dataset.accept},'✓ цена принята');
+  } else if(t.dataset.apply){
+    var all=t.dataset.apply==='ALL';
+    var txt=(D.pending||[]).filter(function(p){return all||p.id===t.dataset.apply;})
+      .map(function(p){return p.id+': '+({cycle:'цикл',cav:'гнёзда',weight:'вес'}[p.field])+' '+p.was+' → '+p.now;}).join('\n');
+    if(confirm('Записать в справочник ТПА (беловик)?\n\n'+txt+'\n\nОператоры сразу увидят новые значения в форме ввода.'))
+      save({action:'costApplyPending',id:t.dataset.apply},'✓ записано в справочник ТПА');
+  } else if(t.dataset.discard){
+    if(confirm(t.dataset.discard==='ALL'?'Отменить все правки черновика?':'Отменить черновик формы '+t.dataset.discard+'?'))
+      save({action:'costDiscardPending',id:t.dataset.discard},'✓ черновик отменён');
   } else if(t.dataset.listAdd){
     var L=t.dataset.listAdd,pre=L==='color'?'nc':'np';
     var nm=document.getElementById(pre+'-name').value.trim();
