@@ -25,6 +25,32 @@
   function lsGet(k) { try { return localStorage.getItem(k) || ''; } catch (e) { return ''; } }
   function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
 
+  // Логотип uzmould справа в шапке каждой страницы
+  function addLogo() {
+    if (document.querySelector('.uz-logo')) return;
+    if (window.innerWidth < 760) return; // на телефоне шапка узкая — без логотипа
+    var head = document.querySelector('header, .topbar, .header');
+    var hs = head && getComputedStyle(head);
+    var inBar = head && hs.display.indexOf('flex') >= 0 && head.getBoundingClientRect().top < 40;
+    var a = document.createElement('a');
+    a.className = 'uz-logo';
+    a.href = s.role === 'admin' ? '/home.html' : '/tpa/index.html';
+    a.title = 'uzmould';
+    a.style.cssText = 'display:inline-flex;align-items:center;flex-shrink:0;margin-left:12px;text-decoration:none;line-height:0';
+    var bg = ((inBar ? hs : getComputedStyle(document.body)).backgroundColor.match(/[\d.]+/g)) || [0, 0, 0, 0];
+    var light = (bg.length > 3 && +bg[3] === 0) || (0.299 * bg[0] + 0.587 * bg[1] + 0.114 * bg[2]) > 140;
+    if (!inBar) a.style.cssText += ';position:fixed;top:14px;right:16px;z-index:50;margin:0';
+    if (light) a.style.cssText += ';background:#111113;padding:5px 9px;border-radius:8px';
+    var img = document.createElement('img');
+    img.src = '/assets/logo.png';
+    img.alt = 'UZMOULD';
+    img.style.cssText = 'height:' + (light ? 16 : 22) + 'px;width:auto;display:block';
+    a.appendChild(img);
+    (inBar ? head : document.body).appendChild(a);
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', addLogo);
+  else addLogo();
+
   window.TPA = {
     session: s,
     isAdmin: s.role === 'admin',
